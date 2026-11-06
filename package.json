@@ -2,7 +2,7 @@
   "name": "minesweeper",
   "version": "1.0.0",
   "private": true,
-  "description": "单文件 HTML5 扫雷：现代深色主题、首点安全、触屏长按插旗、键盘可玩",
+  "description": "单文件 HTML5 扫雷：现代深色主题、首点安全、触屏插旗模式、键盘可玩",
   "scripts": {
     "test": "node --test test/core.test.js",
     "test:dom": "node --test test/dom.test.js"

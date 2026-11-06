@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#070b14">
-<meta name="description" content="一款现代深色主题的 HTML5 扫雷：首点安全、三档难度、触屏长按插旗、键盘可玩。">
+<meta name="description" content="一款现代深色主题的 HTML5 扫雷：首点安全、三档难度、触屏插旗模式、键盘可玩。">
 <title>扫雷 · Minesweeper</title>
 <style>
   :root{
@@ -445,6 +445,7 @@
     display:flex;
     align-items:center;
     justify-content:space-between;
+    flex-wrap:wrap;
     gap:12px;
     padding:12px 4px 1px;
   }
@@ -480,6 +481,18 @@
     transition:color .2s,border-color .2s,background .2s;
   }
   .ghost:hover{color:#e2e8f0;border-color:rgba(56,189,248,.28);background:rgba(8,47,73,.35)}
+  .foot-actions{display:flex;align-items:center;gap:7px;margin-left:auto}
+  .flag-toggle .flag-ico{width:14px;height:14px;display:block;flex:0 0 auto}
+  .flag-toggle[aria-pressed="true"]{
+    color:#fff;
+    border-color:rgba(244,63,94,.55);
+    background:linear-gradient(180deg,rgba(244,63,94,.32),rgba(190,18,60,.28));
+    box-shadow:0 0 0 1px rgba(244,63,94,.18),0 8px 18px -10px rgba(244,63,94,.85);
+  }
+  .flag-toggle[aria-pressed="true"]:hover{
+    border-color:rgba(251,113,133,.75);
+    background:linear-gradient(180deg,rgba(244,63,94,.45),rgba(190,18,60,.38));
+  }
   kbd{
     font-family:ui-monospace,Menlo,Consolas,monospace;
     font-size:9.5px;
@@ -727,13 +740,16 @@
 
     <div class="board-shell">
       <div class="board-wrap" id="boardWrap">
-        <div class="board" id="board" role="grid" tabindex="0" aria-label="扫雷棋盘，方向键移动，空格翻开，F 插旗"></div>
+        <div class="board" id="board" role="grid" tabindex="0" aria-label="扫雷棋盘，方向键移动，空格翻开，F 插旗，可切换插旗模式"></div>
       </div>
     </div>
 
     <div class="foot">
       <p class="hint" id="hint">左键翻开 · 右键插旗</p>
-      <button class="ghost" id="restartBtn" type="button">重新开始 <kbd>R</kbd></button>
+      <div class="foot-actions">
+        <button class="ghost flag-toggle" id="flagBtn" type="button" aria-pressed="false" title="切换插旗模式"><svg class="flag-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-flag"/></svg>插旗模式</button>
+        <button class="ghost" id="restartBtn" type="button">重新开始 <kbd>R</kbd></button>
+      </div>
     </div>
   </main>
 
@@ -1012,6 +1028,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
   const timerEl = document.getElementById('timer');
   const resetBtn = document.getElementById('resetBtn');
   const restartBtn = document.getElementById('restartBtn');
+  const flagBtn = document.getElementById('flagBtn');
   const hintEl = document.getElementById('hint');
   const overlay = document.getElementById('overlay');
   const resultCard = document.getElementById('resultCard');
@@ -1024,7 +1041,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
   const playAgain = document.getElementById('playAgain');
   const confetti = document.getElementById('confetti');
 
-  const LONG_PRESS_MS = 400;
   const MOVE_TOLERANCE = 10;
 
   let levelKey = 'beginner';
@@ -1036,7 +1052,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
   let cellEls = [];
   let press = null;
   let ignoreClickUntil = 0;
-  let suppressContextUntil = 0;
+  let flagMode = false;
 
   const isTouch = window.matchMedia('(pointer: coarse)').matches;
 
@@ -1068,11 +1084,19 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
 
   function updateHint() {
     const overflow = boardWrap.scrollWidth > boardWrap.clientWidth + 1;
-    let text = isTouch
-      ? '点按翻开 · 长按 0.4 秒插旗'
-      : '左键翻开 · 右键插旗 · 方向键可玩';
+    let text;
+    if (flagMode) text = '插旗模式：点按格子插旗/取消 · 再按按钮切回翻开';
+    else if (isTouch) text = '点按翻开 · 用「插旗模式」按钮插旗';
+    else text = '左键翻开 · 右键插旗 · 方向键可玩';
     if (overflow) text += isTouch ? ' · 左右滑动查看' : ' · 棋盘可滚动';
     hintEl.textContent = text;
+  }
+
+  function setFlagMode(on) {
+    flagMode = Boolean(on);
+    flagBtn.setAttribute('aria-pressed', String(flagMode));
+    flagBtn.classList.toggle('active', flagMode);
+    updateHint();
   }
 
   function updateLevelButtons() {
@@ -1283,9 +1307,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
     }
   }
 
+  function activateAt(index) {
+    if (flagMode) flagAt(index);
+    else revealAt(index);
+  }
+
   function flagAt(index) {
-    if (game.status === 'won' || game.status === 'lost') return;
-    const res = Core.toggleFlag(game, index);
+    if (game.status === 'won' || game.status === 'lost') return;    const res = Core.toggleFlag(game, index);
     if (!res.changed) {
       if (res.reason === 'flag-limit') {
         mineStatEl.classList.remove('shake');
@@ -1312,6 +1340,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
     resetFace.setAttribute('href', '#i-face');
     cursor = Math.floor(game.rows / 2) * game.cols + Math.floor(game.cols / 2);
     press = null;
+    setFlagMode(false);
     buildBoard();
     updateLevelButtons();
     updateHint();
@@ -1325,7 +1354,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
   /* ---------- 鼠标 / 触屏 ---------- */
   function cancelPress() {
     if (!press) return;
-    clearTimeout(press.timer);
     const el = cellEls[press.index];
     if (el) el.classList.remove('pressing');
     press = null;
@@ -1340,19 +1368,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
     if (e.pointerType === 'mouse') return;
     if (press) cancelPress();
 
-    press = {
-      index,
-      x: e.clientX,
-      y: e.clientY,
-      long: false,
-      timer: setTimeout(() => {
-        if (!press) return;
-        press.long = true;
-        suppressContextUntil = Date.now() + 900;
-        flagAt(index);
-        el.classList.remove('pressing');
-      }, LONG_PRESS_MS)
-    };
+    press = { index, x: e.clientX, y: e.clientY };
     el.classList.add('pressing');
   });
 
@@ -1367,13 +1383,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
     if (!press) return;
     const p = press;
     cancelPress();
-    if (p.long) {
-      ignoreClickUntil = Date.now() + 700;
-      return;
-    }
     if (e.pointerType === 'mouse') return;
     ignoreClickUntil = Date.now() + 700;
-    revealAt(p.index);
+    activateAt(p.index);
   });
 
   board.addEventListener('pointercancel', cancelPress);
@@ -1385,14 +1397,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
     const el = e.target.closest('.cell');
     if (!el) return;
     if (Date.now() < ignoreClickUntil) return;
-    revealAt(Number(el.dataset.i));
+    activateAt(Number(el.dataset.i));
   });
 
   board.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const el = e.target.closest('.cell');
     if (!el) return;
-    if (Date.now() < suppressContextUntil) return;
+    if (isTouch) return; // 触屏不靠长按插旗，用「插旗模式」按钮
     flagAt(Number(el.dataset.i));
   });
 
@@ -1438,6 +1450,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = Minesweepe
   });
 
   resetBtn.addEventListener('click', () => newGame());
+  flagBtn.addEventListener('click', () => setFlagMode(!flagMode));
   restartBtn.addEventListener('click', () => newGame());
   playAgain.addEventListener('click', () => newGame());
 

@@ -3,7 +3,7 @@
 /**
  * 真实浏览器 DOM 冒烟测试（Chromium headless shell + playwright-core）。
  * 覆盖：页面加载、外链检查、鼠标翻开、右键插旗、重置、难度切换、
- *       键盘操作、手机点按/长按插旗、响应式布局、胜负结算层、计时器。
+ *       键盘操作、手机点按/插旗模式、响应式布局、胜负结算层、计时器。
  * 运行：node --test test/dom.test.js
  */
 const test = require('node:test');
@@ -177,7 +177,7 @@ test('难度切换与键盘：方向键移动、空格翻开、F 插旗、R 重�
   await context.close();
 });
 
-test('手机触屏：点按翻开、长按 400ms 插旗、响应式不横向溢出', async () => {
+test('手机触屏：点按翻开、插旗模式按钮、响应式不横向溢出', async () => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -200,24 +200,30 @@ test('手机触屏：点按翻开、长按 400ms 插旗、响应式不横向溢�
   assert.equal(st.status, 'playing');
   assert.equal(st.cells[40].revealed, true);
 
-  // 找一个未翻开格子，用 CDP 真实触摸事件长按 520ms。
+  // 插旗模式按钮：开启后点按插旗，再点取消；关闭后点按恢复翻开。
   st = await state(page);
   const target = st.cells.findIndex((c) => !c.revealed && !c.flagged);
-  const box = await page.locator('.cell').nth(target).boundingBox();
-  const client = await context.newCDPSession(page);
-  await client.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1 }]
-  });
-  await page.waitForTimeout(520);
-  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await page.waitForTimeout(80);
-
+  await page.locator('#flagBtn').click();
+  assert.equal(await page.locator('#flagBtn').getAttribute('aria-pressed'), 'true', '按钮应进入插旗模式');
+  await page.locator('.cell').nth(target).tap();
   st = await state(page);
-  assert.equal(st.cells[target].flagged, true, '长按应插旗');
-  assert.equal(st.cells[target].revealed, false, '长按不应翻开');
+  assert.equal(st.cells[target].flagged, true, '插旗模式下点按应插旗');
+  assert.equal(st.cells[target].revealed, false, '插旗模式下不应翻开');
   assert.equal(st.flags, 1);
   assert.equal(await page.locator('#mineCount').innerText(), '009');
+
+  await page.locator('.cell').nth(target).tap();
+  st = await state(page);
+  assert.equal(st.cells[target].flagged, false, '再点应取消插旗');
+  await page.locator('#flagBtn').click();
+  assert.equal(await page.locator('#flagBtn').getAttribute('aria-pressed'), 'false', '按钮应退出插旗模式');
+
+  const safe = st.cells.findIndex((c) => !c.mine && !c.revealed && !c.flagged);
+  if (safe >= 0) {
+    await page.locator('.cell').nth(safe).tap();
+    st = await state(page);
+    assert.equal(st.cells[safe].revealed, true, '关闭插旗模式后点按应翻开');
+  }
 
   await page.locator('[data-level="expert"]').click();
   assert.equal(await cellCount(page), 480);
